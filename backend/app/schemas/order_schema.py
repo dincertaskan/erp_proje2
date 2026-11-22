@@ -1,16 +1,27 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List, Literal, Optional
 from datetime import datetime
+
+# Sistemde geçerli sipariş durumları
+ORDER_STATUSES = ("Onay Bekliyor", "Hazırlanıyor", "Kargolandı", "Tamamlandı", "İptal")
+OrderStatus = Literal["Onay Bekliyor", "Hazırlanıyor", "Kargolandı", "Tamamlandı", "İptal"]
+
 
 class OrderItemCreate(BaseModel):
     product_id: int
-    quantity: int
+    quantity: int = Field(gt=0)
+
 
 class OrderCreate(BaseModel):
-    customer_name: Optional[str] = "Misafir Müşteri"
-    payment_method: Optional[str] = "Kredi Kartı"
-    items: List[OrderItemCreate]
+    customer_name: Optional[str] = Field(default="Misafir Müşteri", max_length=100)
+    payment_method: Optional[str] = Field(default="Kredi Kartı", max_length=50)
+    items: List[OrderItemCreate] = Field(min_length=1)
     note: Optional[str] = None
+
+
+class OrderStatusUpdate(BaseModel):
+    order_status: OrderStatus
+
 
 class OrderItemResponse(BaseModel):
     id: int
@@ -22,6 +33,7 @@ class OrderItemResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class OrderResponse(BaseModel):
     id: int

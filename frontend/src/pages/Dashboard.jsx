@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import api, { getImageUrl } from '../api/axios';
 import { 
   Package, DollarSign, Users, AlertTriangle, Loader2, ArrowRight 
 } from 'lucide-react';
@@ -138,10 +138,10 @@ export default function Dashboard() {
                   tickLine={false} 
                   axisLine={false} 
                   tick={{ fontSize: 11, fill: '#94a3b8' }}
-                  tickFormatter={(val) => `$${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
+                  tickFormatter={(val) => `$${val >= 1000 ? `${(val / 1000).toFixed(0)} bin` : val}`}
                 />
                 <Tooltip 
-                  formatter={(val) => [`$${Number(val).toLocaleString('tr-TR')}`, 'Ciro']}
+                  formatter={(val) => [`$${Number(val).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`, 'Ciro']}
                   contentStyle={{ backgroundColor: '#ffffff', borderRadius: '12px', borderColor: '#e2e8f0', fontSize: '12px' }}
                 />
                 <Area 
@@ -226,10 +226,10 @@ export default function Dashboard() {
                       <div className="flex items-center gap-3">
                         {item.image_url ? (
                           <img 
-                            src={item.image_url} 
+                            src={getImageUrl(item.image_url)} 
                             alt={item.name} 
                             className="w-8 h-8 rounded-lg object-cover border border-gray-200 shrink-0"
-                            onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/32?text=Ürün'; }}
+                            onError={(e) => { e.target.onerror = null; e.target.style.visibility = 'hidden'; }}
                           />
                         ) : (
                           <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">

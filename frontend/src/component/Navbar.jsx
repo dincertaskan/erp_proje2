@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, LogOut, Bell, Check, ExternalLink } from 'lucide-react';
-import api, { API_URL } from '../api/axios';
+import api, { clearSession, getImageUrl } from '../api/axios';
+import { useNotifications } from '../context/notificationContext';
 
-export default function Navbar({ notifications, setNotifications }) {
+export default function Navbar() {
   const navigate = useNavigate();
   const userName = localStorage.getItem('user_name') || 'Kullanıcı';
+  const userRole = localStorage.getItem('user_role');
+  const { notifications, dismiss } = useNotifications();
 
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -21,10 +24,8 @@ export default function Navbar({ notifications, setNotifications }) {
     // Sayfa açıldığında veritabanından avatar bilgisini getirme
     const fetchAvatar = async () => {
       try {
-        const res = await api.get(`/auth/me?user_name=${userName}`);
-        if (res.data.avatar_url) {
-          setAvatarUrl(`${API_URL}${res.data.avatar_url}`);
-        }
+        const res = await api.get('/auth/me');
+        setAvatarUrl(getImageUrl(res.data.avatar_url));
       } catch (err) {
         console.error("Navbar profil resmi verisi çekilemedi:", err);
       }
@@ -55,13 +56,14 @@ export default function Navbar({ notifications, setNotifications }) {
   }, [userName]);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user_name');
-    navigate('/login');
+    // Token, kullanıcı bilgileri ve sepet birlikte temizlenir (sonraki kullanıcıya taşınmasın)
+    clearSession();
+    navigate('/login', { replace: true });
   };
 
-  const handleMarkAsRead = (id) => {
-    setNotifications(prev => prev.filter(item => item.id !== id));
+  const handleOpenNotification = (item) => {
+    setShowNotifications(false);
+    if (item.link) navigate(item.link);
   };
 
   return (
@@ -102,12 +104,16 @@ export default function Navbar({ notifications, setNotifications }) {
                   <ul className="space-y-1">
                     {recentNotifications.map((item) => (
                       <li key={item.id} className="text-xs text-gray-600 p-2.5 hover:bg-gray-50 rounded-lg flex items-center justify-between gap-2">
-                        <div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenNotification(item)}
+                          className="text-left cursor-pointer"
+                        >
                           <p className="font-medium text-gray-700">{item.text}</p>
                           <span className="text-[10px] text-gray-400">{item.date}</span>
-                        </div>
+                        </button>
                         <button 
-                          onClick={() => handleMarkAsRead(item.id)}
+                          onClick={() => dismiss(item.id)}
                           title="Okundu olarak sil"
                           className="text-gray-400 hover:text-emerald-600 p-1 hover:bg-emerald-50 rounded transition"
                         >
@@ -167,7 +173,7 @@ export default function Navbar({ notifications, setNotifications }) {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-gray-800 leading-tight">{userName}</p>
-                  <p className="text-xs text-gray-400">Sistem Yöneticisi</p>
+                  <p className="text-xs text-gray-400">{userRole === 'customer' ? 'Müşteri Hesabı' : 'Sistem Yöneticisi'}</p>
                 </div>
               </div>
 

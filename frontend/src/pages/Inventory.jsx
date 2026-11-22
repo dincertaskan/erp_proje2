@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import api, { getErrorMessage, getImageUrl } from '../api/axios';
 import { 
   Search, AlertTriangle, RefreshCw, CheckCircle2, 
   Loader2, Edit3, History, X, Package 
@@ -95,7 +95,7 @@ export default function Inventory() {
       setIsAdjustModalOpen(false);
       fetchInventory();
     } catch (err) {
-      setFormError(err.response?.data?.detail || "İşlem sırasında hata oluştu.");
+      setFormError(getErrorMessage(err, "İşlem sırasında hata oluştu."));
     } finally {
       setFormSubmitting(false);
     }
@@ -212,10 +212,10 @@ export default function Inventory() {
                       <div className="flex items-center gap-3">
                         {p.image_url ? (
                           <img 
-                            src={p.image_url} 
+                            src={getImageUrl(p.image_url)} 
                             alt={p.name} 
                             className="w-9 h-9 rounded-lg object-cover border border-gray-200 shrink-0" 
-                            onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/36?text=Ürün'; }}
+                            onError={(e) => { e.target.onerror = null; e.target.style.visibility = 'hidden'; }}
                           />
                         ) : (
                           <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">

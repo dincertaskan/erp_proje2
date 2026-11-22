@@ -1,17 +1,9 @@
 import { useState, useEffect } from 'react';
-import api, { API_URL } from '../api/axios';
+import api, { getImageUrl } from '../api/axios';
 import { 
   Store, Search, ShoppingCart, Filter, Loader2, 
   CheckCircle2, Eye, RefreshCw, X, ArrowUpDown 
 } from 'lucide-react';
-
-// Resim URL'sini hatasız oluşturan güvenli yardımcı fonksiyon
-const getImageUrl = (url) => {
-  if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  const cleanPath = url.startsWith('/') ? url : `/${url}`;
-  return `${API_URL}${cleanPath}`;
-};
 
 export default function CustomerProducts() {
   const [products, setProducts] = useState([]);
@@ -46,7 +38,7 @@ export default function CustomerProducts() {
           // Eğer kategoriler endpoint'i boş dönerse ürünlerin içindeki kategorilerden dinamik liste oluşturur
           extractCategoriesFromProducts(allProducts);
         }
-      } catch (err) {
+      } catch {
         // Hata durumunda ürün verilerinden kategorileri çıkarır
         extractCategoriesFromProducts(allProducts);
       }
@@ -77,16 +69,31 @@ export default function CustomerProducts() {
 
   // SEPETE EKLEME FONKSİYONU
   const handleAddToCart = (product, qtyToAdd = 1) => {
-    if (product.stock < qtyToAdd) {
-      alert(`Yetersiz Stok! Yalnızca ${product.stock} adet ekleyebilirsiniz.`);
+    let existingCart;
+    try {
+      existingCart = JSON.parse(localStorage.getItem('cart_items') || '[]');
+    } catch {
+      existingCart = [];
+    }
+    const existingIndex = existingCart.findIndex(item => item.id === product.id);
+    const alreadyInCart = existingIndex > -1 ? existingCart[existingIndex].quantity : 0;
+
+    // Sepette zaten bulunan miktar da hesaba katılır
+    if (alreadyInCart + qtyToAdd > product.stock) {
+      const remaining = Math.max(0, product.stock - alreadyInCart);
+      alert(
+        remaining > 0
+          ? `Yetersiz Stok! Sepetinizde ${alreadyInCart} adet var, en fazla ${remaining} adet daha ekleyebilirsiniz.`
+          : `Yetersiz Stok! Bu ürünün mevcut stoğunun tamamı (${product.stock} adet) zaten sepetinizde.`
+      );
       return;
     }
 
-    const existingCart = JSON.parse(localStorage.getItem('cart_items') || '[]');
-    const existingIndex = existingCart.findIndex(item => item.id === product.id);
-
     if (existingIndex > -1) {
       existingCart[existingIndex].quantity += qtyToAdd;
+      // Sepetteki fiyat ve stok bilgisi güncel tutulur
+      existingCart[existingIndex].unit_price = product.unit_price;
+      existingCart[existingIndex].stock = product.stock;
     } else {
       existingCart.push({
         id: product.id,
@@ -256,7 +263,7 @@ export default function CustomerProducts() {
                 <div>
                   <span className="text-[10px] font-bold text-gray-400 block">SATIŞ FİYATI</span>
                   <span className="text-base font-extrabold text-indigo-600">
-                    ₺{Number(product.unit_price || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                    ${Number(product.unit_price || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
@@ -324,7 +331,7 @@ export default function CustomerProducts() {
                   <div className="pt-2">
                     <span className="text-[10px] font-bold text-gray-400 block">BİRİM FİYAT</span>
                     <span className="text-xl font-extrabold text-indigo-600">
-                      ₺{Number(selectedProduct.unit_price || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                      ${Number(selectedProduct.unit_price || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
@@ -358,7 +365,7 @@ export default function CustomerProducts() {
                   }`}
                 >
                   <ShoppingCart size={16} />
-                  <span>Sepete Ekle (₺{(selectedProduct.unit_price * quantity).toLocaleString('tr-TR')})</span>
+                  <span>Sepete Ekle (${(selectedProduct.unit_price * quantity).toLocaleString('tr-TR')})</span>
                 </button>
               </div>
             </div>

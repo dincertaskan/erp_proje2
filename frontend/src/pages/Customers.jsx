@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import api, { API_URL } from '../api/axios';
+import api, { getErrorMessage, getImageUrl } from '../api/axios';
 import { 
-  Users, UserCheck, ShoppingBag, DollarSign, 
+  Users, UserCheck, UserX, DollarSign, 
   Search, RefreshCw, Loader2, Eye, X, Mail, Calendar
 } from 'lucide-react';
 
@@ -13,6 +13,7 @@ export default function Customers() {
   // Modal State
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -29,6 +30,26 @@ export default function Customers() {
   useEffect(() => {
     fetchCustomers();
   }, []);
+
+  // MÜŞTERİ HESABINI AKTİF / PASİF YAPMA (pasif müşteri sisteme giriş yapamaz)
+  const handleToggleActive = async (customer) => {
+    const nextActive = !customer.is_active;
+    const question = nextActive
+      ? `${customer.full_name} adlı müşterinin hesabı yeniden aktif edilsin mi?`
+      : `${customer.full_name} adlı müşterinin hesabı pasif yapılsın mı? Müşteri sisteme giriş yapamayacak.`;
+    if (!window.confirm(question)) return;
+
+    setTogglingId(customer.id);
+    try {
+      const res = await api.patch(`/customers/${customer.id}/status`, { is_active: nextActive });
+      setCustomers(prev => prev.map(c => (c.id === customer.id ? res.data : c)));
+      setSelectedCustomer(prev => (prev?.id === customer.id ? res.data : prev));
+    } catch (err) {
+      alert(getErrorMessage(err, 'Müşteri durumu güncellenemedi.'));
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   // KPI HESAPLAMALARI
   const totalCustomersCount = customers.length;
@@ -135,7 +156,7 @@ export default function Customers() {
                     <td className="p-4 font-bold text-gray-800 flex items-center gap-2.5">
                         {c.avatar_url ? (
                             <img 
-                                src={`${API_URL}${c.avatar_url}`} 
+                                src={getImageUrl(c.avatar_url)} 
                                 alt={c.full_name} 
                                 className="w-8 h-8 rounded-full object-cover shrink-0 border border-gray-200"
                             />
@@ -159,13 +180,29 @@ export default function Customers() {
                       </span>
                     </td>
                     <td className="p-4 text-center">
-                      <button 
-                        onClick={() => { setSelectedCustomer(c); setIsDetailModalOpen(true); }}
-                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                        title="Cari Kart Detayı"
-                      >
-                        <Eye size={16} />
-                      </button>
+                      <div className="flex items-center justify-center gap-1">
+                        <button 
+                          onClick={() => { setSelectedCustomer(c); setIsDetailModalOpen(true); }}
+                          className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                          title="Cari Kart Detayı"
+                        >
+                          <Eye size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleToggleActive(c)}
+                          disabled={togglingId === c.id}
+                          className={`p-1.5 rounded-lg transition cursor-pointer disabled:opacity-50 ${
+                            c.is_active
+                              ? 'text-gray-500 hover:text-red-600 hover:bg-red-50'
+                              : 'text-gray-500 hover:text-emerald-600 hover:bg-emerald-50'
+                          }`}
+                          title={c.is_active ? 'Hesabı Pasif Yap' : 'Hesabı Aktif Et'}
+                        >
+                          {togglingId === c.id
+                            ? <Loader2 size={16} className="animate-spin" />
+                            : c.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -191,7 +228,7 @@ export default function Customers() {
               <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
                 {selectedCustomer.avatar_url ? (
                     <img 
-                        src={`${API_URL}${selectedCustomer.avatar_url}`} 
+                        src={getImageUrl(selectedCustomer.avatar_url)} 
                         alt={selectedCustomer.full_name} 
                         className="w-12 h-12 rounded-full object-cover shrink-0 border-2 border-indigo-600"
                     />

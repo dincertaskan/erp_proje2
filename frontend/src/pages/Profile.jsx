@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import api, { API_URL } from '../api/axios';
+import api, { getErrorMessage, getImageUrl } from '../api/axios';
 import { 
-  User, Mail, Shield, CheckCircle2, 
-  Upload, Camera, Loader2, MapPin, Building2, Phone 
+  Mail, Shield, Camera, Loader2, MapPin, Building2 
 } from 'lucide-react';
 
 export default function Profile() {
@@ -11,14 +10,13 @@ export default function Profile() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
-  const userName = localStorage.getItem('user_name') || 'Kullanıcı';
   const userRole = localStorage.getItem('user_role') || 'customer';
 
   // PROFİL BİLGİLERİNİ ÇEKME
   const fetchProfile = async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/auth/me?user_name=${encodeURIComponent(userName)}`);
+      const res = await api.get('/auth/me');
       setProfile(res.data);
     } catch (err) {
       console.error("Profil bilgisi alınamadı:", err);
@@ -42,16 +40,20 @@ export default function Profile() {
 
     setUploading(true);
     try {
-      await api.post(`/auth/upload-avatar?user_name=${encodeURIComponent(userName)}`, formData, {
+      const res = await api.post('/auth/upload-avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      
+
+      // Üst menüdeki profil fotoğrafını da anında güncelle
+      window.dispatchEvent(new CustomEvent('profile_avatar_updated', { detail: getImageUrl(res.data.avatar_url) }));
       alert('Profil fotoğrafınız başarıyla güncellendi.');
       fetchProfile();
     } catch (err) {
-      alert(err.response?.data?.detail || 'Fotoğraf yüklenirken bir hata oluştu.');
+      alert(getErrorMessage(err, 'Fotoğraf yüklenirken bir hata oluştu.'));
     } finally {
       setUploading(false);
+      // Aynı dosya tekrar seçilebilsin diye input sıfırlanır
+      e.target.value = '';
     }
   };
 
@@ -74,6 +76,12 @@ export default function Profile() {
         </h1>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl text-center text-xs font-medium">
+          {error}
+        </div>
+      )}
+
       {/* PROFİL KARTI */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-xs p-6 space-y-6 w-full">
         {/* ÜST KISIM (FOTOĞRAF & İSİM) */}
@@ -81,7 +89,7 @@ export default function Profile() {
           <div className="relative group">
             {profile?.avatar_url ? (
               <img 
-                src={`${API_URL}${profile.avatar_url}`} 
+                src={getImageUrl(profile.avatar_url)} 
                 alt={profile.full_name} 
                 className="w-24 h-24 rounded-full object-cover border-4 border-indigo-50 shadow-xs"
               />
@@ -93,7 +101,7 @@ export default function Profile() {
 
             <label className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2 rounded-full cursor-pointer shadow-md hover:bg-indigo-700 transition">
               {uploading ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
-              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploading} />
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleAvatarUpload} disabled={uploading} />
             </label>
           </div>
 
@@ -115,7 +123,7 @@ export default function Profile() {
 
             <label className="inline-block text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer pt-1">
               {uploading ? 'Fotoğraf Yükleniyor...' : 'Fotoğraf Değiştir'}
-              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploading} />
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleAvatarUpload} disabled={uploading} />
             </label>
           </div>
         </div>

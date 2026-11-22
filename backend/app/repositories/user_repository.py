@@ -15,7 +15,10 @@ class UserRepository:
     def get_customer_by_email(self, email: str) -> Customer | None:
         return self.db.query(Customer).filter(func.lower(Customer.email) == email.lower()).first()
 
-    def create_user(self, user: UserCreate, hashed_password: str) -> User:
+    def get_admins(self) -> list[User]:
+        return self.db.query(User).filter(User.role == "admin").order_by(User.id.asc()).all()
+
+    def create_user(self, user, hashed_password: str) -> User:
         """Admin kullanıcıyı 'users' tablosuna kaydeder."""
         db_user = User(
             full_name=user.full_name,

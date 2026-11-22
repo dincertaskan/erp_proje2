@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/axios';
+import api, { getImageUrl } from '../api/axios';
 import { 
   Plus, Search, Edit3, Trash2, Package, 
   Loader2, X, RefreshCw, AlertCircle, Image as ImageIcon 
@@ -25,10 +25,12 @@ export default function Products() {
     stock: '0',
     min_stock: '5',
     image_url: '',
-    description: ''
+    description: '',
+    is_active: true
   });
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [defaultMinStock, setDefaultMinStock] = useState(5);
 
   // Ürün formundan yeni kategori ekleme
   const [showNewCategory, setShowNewCategory] = useState(false);
@@ -59,6 +61,13 @@ export default function Products() {
   useEffect(() => {
     fetchProducts();
   }, [selectedCategory]);
+
+  // Yeni ürün formundaki kritik stok sınırı Ayarlar'dan gelir
+  useEffect(() => {
+    api.get('/settings')
+      .then((res) => setDefaultMinStock(res.data.default_min_stock))
+      .catch((err) => console.error('Ayarlar alınamadı:', err));
+  }, []);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -108,9 +117,10 @@ export default function Products() {
       unit_price: '',
       cost_price: '',
       stock: '0',
-      min_stock: '5',
+      min_stock: String(defaultMinStock),
       image_url: '',
-      description: ''
+      description: '',
+      is_active: true
     });
     setIsModalOpen(true);
   };
@@ -125,9 +135,10 @@ export default function Products() {
       unit_price: product.unit_price || 0,
       cost_price: product.cost_price || 0,
       stock: '0',
-      min_stock: '5',
+      min_stock: String(product.min_stock ?? 5),
       image_url: product.image_url || '',
-      description: product.description || ''
+      description: product.description || '',
+      is_active: product.is_active !== false
     });
     setIsModalOpen(true);
   };
@@ -161,9 +172,13 @@ export default function Products() {
       description: productForm.description
     };
 
-    if (!editingProduct) {
-      payload.stock = parseInt(productForm.stock) || 0;
-      payload.min_stock = parseInt(productForm.min_stock) || 5;
+    const minStock = parseInt(productForm.min_stock, 10);
+    payload.min_stock = Number.isNaN(minStock) ? 5 : minStock;
+
+    if (editingProduct) {
+      payload.is_active = productForm.is_active;
+    } else {
+      payload.stock = parseInt(productForm.stock, 10) || 0;
     }
 
     try {
@@ -284,10 +299,10 @@ export default function Products() {
                         <div className="flex items-center gap-3">
                           {p.image_url ? (
                             <img 
-                              src={p.image_url} 
+                              src={getImageUrl(p.image_url)} 
                               alt={p.name} 
                               className="w-9 h-9 rounded-lg object-cover border border-gray-200 shrink-0" 
-                              onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/36?text=Ürün'; }}
+                              onError={(e) => { e.target.onerror = null; e.target.style.visibility = 'hidden'; }}
                             />
                           ) : (
                             <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
@@ -295,6 +310,11 @@ export default function Products() {
                             </div>
                           )}
                           <span className="line-clamp-1">{p.name}</span>
+                          {p.is_active === false && (
+                            <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500 border border-gray-200">
+                              Satış Dışı
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="p-4 text-center text-gray-500 truncate">{p.category_name}</td>
@@ -504,6 +524,32 @@ export default function Products() {
                       className="w-full border border-gray-300 p-2.5 rounded-lg text-xs focus:outline-indigo-500"
                     />
                   </div>
+                </div>
+              )}
+
+              {editingProduct && (
+                <div className="grid grid-cols-2 gap-3 items-end">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1">Kritik Stok Sınırı</label>
+                    <input 
+                      type="number" 
+                      required 
+                      min="0"
+                      value={productForm.min_stock}
+                      onChange={e => setProductForm({...productForm, min_stock: e.target.value})}
+                      placeholder="5"
+                      className="w-full border border-gray-300 p-2.5 rounded-lg text-xs focus:outline-indigo-500"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 p-2.5 border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={productForm.is_active}
+                      onChange={e => setProductForm({...productForm, is_active: e.target.checked})}
+                      className="accent-indigo-600"
+                    />
+                    Müşteri kataloğunda satışta
+                  </label>
                 </div>
               )}
 

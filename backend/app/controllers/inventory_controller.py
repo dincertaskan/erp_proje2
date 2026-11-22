@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.core.database import get_db
+from app.core.security import CurrentUser, get_current_user, require_admin
 from app.schemas.inventory_schema import (
     CategoryCreate,
     CategoryResponse,
@@ -19,12 +20,16 @@ CATEGORY_NOT_FOUND = "Seçilen kategori bulunamadı. Lütfen geçerli bir katego
 
 # 0a. Kategori Listesi
 @router.get("/categories", response_model=List[CategoryResponse])
-def get_categories(db: Session = Depends(get_db)):
+def get_categories(db: Session = Depends(get_db), _: CurrentUser = Depends(get_current_user)):
     return InventoryRepository(db).get_all_categories()
 
 # 0b. Yeni Kategori Ekle
 @router.post("/categories", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
-def create_category(category_data: CategoryCreate, db: Session = Depends(get_db)):
+def create_category(
+    category_data: CategoryCreate,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+):
     repo = InventoryRepository(db)
     if repo.get_category_by_name(category_data.name):
         raise HTTPException(status_code=409, detail=f"'{category_data.name}' adında bir kategori zaten var.")
@@ -40,23 +45,36 @@ def get_products(
     search: Optional[str] = Query(None),
     category_id: Optional[int] = Query(None),
     status_filter: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
 ):
     repo = InventoryRepository(db)
-    return repo.get_all_products(search=search, category_id=category_id, status_filter=status_filter)
+    products = repo.get_all_products(search=search, category_id=category_id, status_filter=status_filter)
+    if not current_user.is_admin:
+        # Müşteriler satıştan kaldırılmış (pasif) ürünleri görmez
+        products = [p for p in products if p.is_active is not False]
+    return products
 
 # 2. Tekil Ürün Detayı (YENİ EKLENDİ)
 @router.get("/products/{product_id}", response_model=ProductDetailResponse)
-def get_product_detail(product_id: int, db: Session = Depends(get_db)):
+def get_product_detail(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+):
     repo = InventoryRepository(db)
     product = repo.get_product_by_id(product_id)
-    if not product:
+    if not product or (not current_user.is_admin and product.is_active is False):
         raise HTTPException(status_code=404, detail="Aradığınız ürün bulunamadı.")
     return product
 
 # 3. Yeni Ürün Ekle
 @router.post("/products", response_model=ProductDetailResponse, status_code=status.HTTP_201_CREATED)
-def create_product(product_data: ProductCreate, db: Session = Depends(get_db)):
+def create_product(
+    product_data: ProductCreate,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+):
     repo = InventoryRepository(db)
     if not repo.category_exists(product_data.category_id):
         raise HTTPException(status_code=400, detail=CATEGORY_NOT_FOUND)
@@ -68,12 +86,19 @@ def create_product(product_data: ProductCreate, db: Session = Depends(get_db)):
 
 # 4. Ürün Güncelle
 @router.put("/products/{product_id}", response_model=ProductDetailResponse)
-def update_product(product_id: int, product_data: ProductUpdate, db: Session = Depends(get_db)):
+def update_product(
+    product_id: int,
+    product_data: ProductUpdate,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+):
     repo = InventoryRepository(db)
     if product_data.category_id is not None and not repo.category_exists(product_data.category_id):
         raise HTTPException(status_code=400, detail=CATEGORY_NOT_FOUND)
     try:
         product = repo.update_product(product_id, product_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Ürün güncellenemedi. Girdiğiniz bilgileri kontrol edin.")
@@ -83,7 +108,11 @@ def update_product(product_id: int, product_data: ProductUpdate, db: Session = D
 
 # 5. Ürün Sil
 @router.delete("/products/{product_id}")
-def delete_product(product_id: int, db: Session = Depends(get_db)):
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+):
     repo = InventoryRepository(db)
     if repo.is_product_used_in_sales(product_id):
         raise HTTPException(
@@ -102,11 +131,14 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 # 6. Stok Düzenleme ve Log Kaydetme
 @router.post("/products/{product_id}/adjust-stock")
 def adjust_stock(
-    product_id: int, 
-    data: StockAdjustmentCreate, 
-    db: Session = Depends(get_db)
+    product_id: int,
+    data: StockAdjustmentCreate,
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(require_admin),
 ):
     repo = InventoryRepository(db)
+    # Stok hareketini yapan kişi, istemcinin gönderdiği isim yerine oturum sahibinden alınır
+    data = data.model_copy(update={"user_name": current_user.full_name})
     product, error = repo.adjust_stock(product_id, data)
     if error:
         raise HTTPException(status_code=400 if "stok" in error or "işlem" in error else 404, detail=error)
@@ -118,7 +150,11 @@ def adjust_stock(
 
 # 7. Ürünün Stok Hareket Loglarını Getirme
 @router.get("/products/{product_id}/logs")
-def get_product_logs(product_id: int, db: Session = Depends(get_db)):
+def get_product_logs(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: CurrentUser = Depends(require_admin),
+):
     repo = InventoryRepository(db)
     movements = repo.get_product_logs(product_id)
     

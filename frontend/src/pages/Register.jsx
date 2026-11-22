@@ -1,16 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api/axios';
-import { UserPlus, Shield, User } from 'lucide-react';
+import api, { getErrorMessage } from '../api/axios';
+import { validatePassword } from '../utils/validation';
+import { UserPlus } from 'lucide-react';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('admin'); // Varsayılan olarak Admin veya Customer seçilebilir
   const [error, setError] = useState('');
+  const [registrationOpen, setRegistrationOpen] = useState(true);
   const navigate = useNavigate();
+
+  // Yönetici Ayarlar sayfasından yeni kayıtları kapatmış olabilir
+  useEffect(() => {
+    api.get('/settings/public')
+      .then((res) => setRegistrationOpen(res.data.allow_registration))
+      .catch(() => {});
+  }, []);
 
   const validateEmail = (emailStr) => {
     // İzin verilen e-posta uzantıları
@@ -40,25 +48,6 @@ export default function Register() {
     return null;
   };
 
-  const validatePassword = (pass) => {
-    if (pass.length < 8) {
-      return "Şifre en az 8 karakter olmalıdır.";
-    }
-    if (!/[A-Z]/.test(pass)) {
-      return "Şifre en az bir büyük harf içermelidir (A-Z).";
-    }
-    if (!/[a-z]/.test(pass)) {
-      return "Şifre en az bir küçük harf içermelidir (a-z).";
-    }
-    if (!/[0-9]/.test(pass)) {
-      return "Şifre en az bir rakam içermelidir (0-9).";
-    }
-    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pass)) {
-      return "Şifre en az bir özel karakter içermelidir (örn: !, @, #, $, %).";
-    }
-    return null;
-  };
-
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
@@ -84,26 +73,35 @@ export default function Register() {
       await api.post('/auth/register', {
         full_name: fullName,
         email,
-        password,
-        role // Backend'e rol bilgisi gönderiliyor
+        password
+        // Kayıt sayfasından yalnızca müşteri hesabı açılır; yöneticileri mevcut bir yönetici ekler
       });
 
       alert('Kayıt başarılı! Lütfen giriş yapınız.');
       navigate('/login');
     } catch (err) {
       console.error("Kayıt Detaylı Hata Yanıtı:", err.response);
-      
-      const serverDetail = err.response?.data?.detail;
-      
-      if (typeof serverDetail === 'string') {
-        setError(serverDetail);
-      } else if (Array.isArray(serverDetail)) {
-        setError(serverDetail[0]?.msg || 'Form verileri geçersiz.');
-      } else {
-        setError(err.message || 'Sunucuyla iletişim kurulamadı.');
-      }
+      setError(getErrorMessage(err, 'Form verileri geçersiz.'));
     }
   };
+
+  if (!registrationOpen) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md flex flex-col gap-4 text-center">
+          <div className="flex items-center gap-2 justify-center text-indigo-600 font-bold text-2xl">
+            <UserPlus size={28} /> Kayıt Ol
+          </div>
+          <div className="bg-amber-50 text-amber-700 p-3 rounded-lg text-sm font-medium border border-amber-200">
+            Yeni müşteri kaydı şu anda kapalı. Lütfen daha sonra tekrar deneyin.
+          </div>
+          <p className="text-xs text-gray-500">
+            Zaten hesabın var mı? <Link to="/login" className="text-indigo-600 font-semibold hover:underline">Giriş Yap</Link>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
@@ -117,36 +115,6 @@ export default function Register() {
             {error}
           </div>
         )}
-
-        {/* HESAP TÜRÜ / ROL SEÇİM ALANI */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1.5">Hesap Türü Seçiniz</label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setRole('admin')}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border text-xs font-bold transition cursor-pointer ${
-                role === 'admin'
-                  ? 'bg-indigo-50 border-indigo-600 text-indigo-700 shadow-xs'
-                  : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              <Shield size={16} /> Admin (Yönetici)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRole('customer')}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border text-xs font-bold transition cursor-pointer ${
-                role === 'customer'
-                  ? 'bg-indigo-50 border-indigo-600 text-indigo-700 shadow-xs'
-                  : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              <User size={16} /> Müşteri
-            </button>
-          </div>
-        </div>
 
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">Ad Soyad</label>

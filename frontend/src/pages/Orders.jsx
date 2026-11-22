@@ -1,9 +1,18 @@
 import { useState, useEffect } from 'react';
-import api from '../api/axios';
+import api, { getErrorMessage } from '../api/axios';
 import { 
   ShoppingBag, Clock, CheckCircle2, DollarSign, 
   Search, RefreshCw, Loader2, X, Eye, Printer 
 } from 'lucide-react';
+
+// Faturaya yazılan metinlerdeki HTML karakterlerini etkisiz hale getirir
+const escapeHtml = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+
+const formatTL = (value) =>
+  `$${Number(value || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
@@ -16,6 +25,7 @@ export default function Orders() {
   // Modal State
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [company, setCompany] = useState(null);
 
   // SİPARİŞ VERİLERİNİ ÇEKME (Sadece Siparişler)
   const fetchOrdersData = async () => {
@@ -32,6 +42,10 @@ export default function Orders() {
 
   useEffect(() => {
     fetchOrdersData();
+    // Fatura başlığındaki firma bilgileri Ayarlar sayfasından gelir
+    api.get('/settings')
+      .then((res) => setCompany(res.data))
+      .catch((err) => console.error('Firma bilgileri alınamadı:', err));
   }, []);
 
   // DURUM GÜNCELLEME VE İPTAL/İADE MANTIĞI
@@ -46,17 +60,37 @@ export default function Orders() {
       await api.patch(`/orders/${orderId}/status`, { order_status: newStatus });
       fetchOrdersData();
     } catch (err) {
-      alert(err.response?.data?.detail || "Sipariş durumu güncellenirken bir hata oluştu.");
+      alert(getErrorMessage(err, "Sipariş durumu güncellenirken bir hata oluştu."));
     }
   };
 
   // FATURA YAZDIRMA / GÖRÜNTÜLEME
   const handlePrintInvoice = (order) => {
     const printWindow = window.open('', '', 'width=800,height=600');
+    if (!printWindow) {
+      alert('Fatura penceresi açılamadı. Lütfen tarayıcınızın açılır pencere engelleyicisini kapatın.');
+      return;
+    }
+    const items = order.items?.length
+      ? order.items
+      : [{ product_name: order.product_name, quantity: order.quantity, unit_price: order.total_price / (order.quantity || 1), total_price: order.total_price }];
+    const companyName = company?.company_name || 'ERP Yönetim Sistemi';
+    const companyLines = [
+      company?.company_address,
+      [company?.company_phone, company?.company_email].filter(Boolean).join(' · '),
+      [company?.tax_office && `Vergi Dairesi: ${company.tax_office}`, company?.tax_number && `VKN: ${company.tax_number}`].filter(Boolean).join(' · '),
+    ].filter(Boolean).map((line) => `<div>${escapeHtml(line)}</div>`).join('');
+    const itemRows = items.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.product_name)}</td>
+                <td>${escapeHtml(item.quantity)} Adet</td>
+                <td>${formatTL(item.unit_price)}</td>
+                <td>${formatTL(item.total_price)}</td>
+              </tr>`).join('');
     printWindow.document.write(`
       <html>
         <head>
-          <title>Fatura - ${order.order_code}</title>
+          <title>Fatura - ${escapeHtml(order.order_code)}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 30px; font-size: 14px; color: #1e293b; }
             .header { display: flex; justify-content: space-between; border-bottom: 2px solid #6366f1; padding-bottom: 15px; }
@@ -65,23 +99,25 @@ export default function Orders() {
             .info-table th, .info-table td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
             .info-table th { background-color: #f8fafc; font-size: 12px; }
             .total { text-align: right; margin-top: 20px; font-size: 16px; font-weight: bold; color: #059669; }
+            .company { margin-top: 6px; color: #64748b; font-size: 12px; line-height: 1.5; }
           </style>
         </head>
         <body>
           <div class="header">
             <div>
-              <div class="title">ERP YÖNETİM SİSTEMİ - RESMİ FATURA</div>
+              <div class="title">${escapeHtml(companyName.toLocaleUpperCase('tr-TR'))} - FATURA</div>
+              <div class="company">${companyLines}</div>
               <p style="margin-top: 5px; color: #64748b;">Tarih: ${new Date(order.created_at || Date.now()).toLocaleDateString('tr-TR')}</p>
             </div>
             <div>
-              <h3 style="margin:0;">Sipariş No: ${order.order_code}</h3>
+              <h3 style="margin:0;">Sipariş No: ${escapeHtml(order.order_code)}</h3>
             </div>
           </div>
           
           <div style="margin-top: 20px; line-height: 1.6;">
-            <strong>Müşteri Adı:</strong> ${order.customer_name}<br/>
-            <strong>Ödeme Yöntemi:</strong> ${order.payment_method}<br/>
-            <strong>Ödeme Durumu:</strong> ${order.payment_status}
+            <strong>Müşteri Adı:</strong> ${escapeHtml(order.customer_name)}<br/>
+            <strong>Ödeme Yöntemi:</strong> ${escapeHtml(order.payment_method)}<br/>
+            <strong>Ödeme Durumu:</strong> ${escapeHtml(order.payment_status)}
           </div>
 
           <table class="info-table">
@@ -93,18 +129,12 @@ export default function Orders() {
                 <th>Toplam</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td>${order.product_name}</td>
-                <td>${order.quantity} Adet</td>
-                <td>$${(order.total_price / order.quantity).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                <td>$${Number(order.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-              </tr>
+            <tbody>${itemRows}
             </tbody>
           </table>
 
           <div class="total">
-            Genel Toplam: $${Number(order.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+            Genel Toplam: ${formatTL(order.total_price)}
           </div>
         </body>
       </html>
@@ -340,7 +370,7 @@ export default function Orders() {
               </div>
               <div className="flex justify-between py-1 border-b border-gray-50">
                 <span className="text-gray-400">Toplam Tutar:</span>
-                <span className="font-extrabold text-emerald-600">${Number(selectedOrder.total_price).toLocaleString('tr-TR')}</span>
+                <span className="font-extrabold text-emerald-600">${Number(selectedOrder.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-gray-50">
                 <span className="text-gray-400">Ödeme Yöntemi:</span>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api, { API_URL } from '../api/axios';
+import api, { getImageUrl } from '../api/axios';
 import { 
   ShoppingBag, ArrowRight, Sparkles, ShoppingCart, 
   Loader2, CheckCircle2, Clock, Star, Tag 
@@ -24,12 +24,11 @@ export default function CustomerHome() {
         ]);
 
         // Aktif ve stokta olan ürünleri öne çıkarıyoruz
-        const activeProds = (prodRes.data || []).filter(p => p.is_active && p.stock > 0);
+        const activeProds = (prodRes.data || []).filter(p => p.is_active !== false && p.stock > 0);
         setFeaturedProducts(activeProds.slice(0, 6)); // İlk 6 ürünü vitrine koy
 
-        // Kullanıcının kendi siparişleri (İsme göre süzme)
-        const myOrd = (ordersRes.data || []).filter(o => o.customer_name === userName);
-        setMyOrders(myOrd);
+        // Backend müşteriye yalnızca kendi siparişlerini döner
+        setMyOrders(ordersRes.data || []);
       } catch (err) {
         console.error("Anasayfa verileri çekilemedi:", err);
       } finally {
@@ -160,7 +159,7 @@ export default function CustomerHome() {
                   <div className="h-40 w-full bg-gray-50 rounded-xl overflow-hidden flex items-center justify-center relative border border-gray-100">
                     {product.image_url ? (
                       <img 
-                        src={`${API_URL}${product.image_url}`} 
+                        src={getImageUrl(product.image_url)} 
                         alt={product.name} 
                         className="h-full w-full object-cover group-hover:scale-105 transition duration-300"
                       />
@@ -186,7 +185,7 @@ export default function CustomerHome() {
                   <div>
                     <span className="text-[10px] font-bold text-gray-400 block">SATIŞ FİYATI</span>
                     <span className="text-base font-extrabold text-indigo-600">
-                      ₺{Number(product.unit_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                      ${Number(product.unit_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
 

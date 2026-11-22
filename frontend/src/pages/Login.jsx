@@ -1,20 +1,28 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import api from '../api/axios';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import api, { clearSession, getErrorMessage } from '../api/axios';
+import { getHomePath } from '../utils/routes';
 import { LogIn } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get('oturum') === 'sona-erdi';
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setSubmitting(true);
     try {
       const res = await api.post('/auth/login', { email, password });
-      
+
+      // Önceki oturumdan kalan bilgiler (ör. başka kullanıcının sepeti) temizlenir
+      clearSession();
+
       // Token ve Kullanıcı Bilgilerini Kaydetme
       localStorage.setItem('token', res.data.access_token);
       
@@ -27,21 +35,13 @@ export default function Login() {
       localStorage.setItem('user_role', userRole);
 
       // Role göre dinamik yönlendirme
-      if (userRole === 'admin') {
-        navigate('/dashboard');
-      } else {
-        navigate('/portal/anasayfa'); // Müşteri portalına yönlendirme
-      }
+      navigate(getHomePath(userRole), { replace: true });
 
     } catch (err) {
       console.error("Giriş Hatası:", err.response);
-      if (typeof err.response?.data?.detail === 'string') {
-        setError(err.response.data.detail);
-      } else if (Array.isArray(err.response?.data?.detail)) {
-        setError(err.response.data.detail[0]?.msg || 'Giriş bilgileri geçersiz.');
-      } else {
-        setError('E-posta veya şifre hatalı.');
-      }
+      setError(getErrorMessage(err, 'E-posta veya şifre hatalı.'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -52,6 +52,12 @@ export default function Login() {
           <LogIn size={28} /> Giriş Yap
         </div>
         
+        {sessionExpired && !error && (
+          <div className="bg-amber-50 text-amber-700 p-2.5 rounded-lg text-sm text-center font-medium border border-amber-200">
+            Oturumunuzun süresi doldu. Lütfen tekrar giriş yapın.
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-100 text-red-600 p-2.5 rounded-lg text-sm text-center font-medium border border-red-200">
             {error}
@@ -76,9 +82,10 @@ export default function Login() {
         />
         <button 
           type="submit" 
-          className="bg-indigo-600 text-white py-2.5 rounded-lg font-semibold hover:bg-indigo-700 transition shadow-sm cursor-pointer"
+          disabled={submitting}
+          className="bg-indigo-600 text-white py-2.5 rounded-lg font-semibold hover:bg-indigo-700 transition shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Giriş Yap
+          {submitting ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
         </button>
         <p className="text-xs text-center text-gray-500 mt-2">
           Hesabın yok mu? <Link to="/register" className="text-indigo-600 font-semibold hover:underline">Kayıt Ol</Link>

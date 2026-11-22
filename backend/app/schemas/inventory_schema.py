@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 
 # KATEGORİ ŞEMALARI
@@ -25,9 +25,10 @@ class CategoryResponse(BaseModel):
 
 # STOK HAREKET VE DÜZENLEME ŞEMALARI
 class StockAdjustmentCreate(BaseModel):
-    user_name: str
-    action_type: str  # "ARTTIR" veya "AZALT"
-    quantity: int
+    # İşlemi yapan kişi artık token'dan alınır; alan geriye dönük uyumluluk için duruyor
+    user_name: Optional[str] = None
+    action_type: Literal["ARTTIR", "AZALT"]
+    quantity: int = Field(gt=0)
     description: Optional[str] = None
 
 class StockMovementResponse(BaseModel):
@@ -43,29 +44,50 @@ class StockMovementResponse(BaseModel):
     class Config:
         from_attributes = True
 
+def _clean_product_name(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return value
+    value = value.strip()
+    if not value:
+        raise ValueError("Ürün adı boş olamaz.")
+    return value
+
+
 class ProductCreate(BaseModel):
-    name: str
+    name: str = Field(max_length=200)
     category_id: int
-    unit_price: float
-    cost_price: Optional[float] = 0.0
-    stock: Optional[int] = 0
-    min_stock: Optional[int] = 5
+    unit_price: float = Field(ge=0)
+    cost_price: Optional[float] = Field(default=0.0, ge=0)
+    stock: Optional[int] = Field(default=0, ge=0)
+    min_stock: Optional[int] = Field(default=5, ge=0)
     image_url: Optional[str] = None
     description: Optional[str] = None
 
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value):
+        return _clean_product_name(value)
+
     @model_validator(mode='after')
     def validate_prices(self):
-        if self.unit_price < self.cost_price:
+        if self.unit_price < (self.cost_price or 0):
             raise ValueError("Satış fiyatı maliyet fiyatından düşük olamaz.")
         return self
 
 class ProductUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=200)
     category_id: Optional[int] = None
-    unit_price: Optional[float] = None
-    cost_price: Optional[float] = None
+    unit_price: Optional[float] = Field(default=None, ge=0)
+    cost_price: Optional[float] = Field(default=None, ge=0)
+    min_stock: Optional[int] = Field(default=None, ge=0)
     image_url: Optional[str] = None
     description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value):
+        return _clean_product_name(value)
 
     @model_validator(mode='after')
     def validate_prices(self):
@@ -85,6 +107,7 @@ class ProductDetailResponse(BaseModel):
     min_stock: int
     image_url: Optional[str] = None
     is_critical: Optional[bool] = False
+    is_active: Optional[bool] = True
     description: Optional[str] = None
 
     class Config:

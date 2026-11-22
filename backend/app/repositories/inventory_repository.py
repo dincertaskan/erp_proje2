@@ -84,7 +84,14 @@ class InventoryRepository:
         if not product:
             return None
         
-        update_dict = product_data.dict(exclude_unset=True)
+        update_dict = product_data.model_dump(exclude_unset=True)
+
+        # Yalnızca fiyatlardan biri gönderilse bile mevcut değerle birlikte kontrol edilir
+        new_unit_price = update_dict.get("unit_price", product.unit_price) or 0
+        new_cost_price = update_dict.get("cost_price", product.cost_price) or 0
+        if new_unit_price < new_cost_price:
+            raise ValueError("Satış fiyatı maliyet fiyatından düşük olamaz.")
+
         for key, value in update_dict.items():
             setattr(product, key, value)
             

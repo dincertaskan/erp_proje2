@@ -23,9 +23,17 @@ def _normalize_database_url(url: str | None) -> str:
     return url
 
 
+def _require_secret_key(value: str | None) -> str:
+    if not value:
+        raise RuntimeError(
+            "SECRET_KEY tanımlı değil. backend/.env dosyasına uzun ve rastgele bir SECRET_KEY girin."
+        )
+    return value
+
+
 class Settings:
     DATABASE_URL: str = _normalize_database_url(os.getenv("DATABASE_URL"))
-    SECRET_KEY: str = os.getenv("SECRET_KEY")
+    SECRET_KEY: str = _require_secret_key(os.getenv("SECRET_KEY"))
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
@@ -35,6 +43,12 @@ class Settings:
         "http://127.0.0.1:5173",
         *[o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()],
     ]
+
+    # Backend başlarken bu e-postayla bir hesap yoksa otomatik oluşturulur (bkz. app/core/bootstrap.py).
+    # Var olan hesaba dokunulmaz. İstenirse .env dosyasında ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME ile değiştirilebilir.
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "").strip() or "admin@gmail.com"
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "") or "admin123"
+    ADMIN_NAME: str = os.getenv("ADMIN_NAME", "").strip() or "Sistem Yöneticisi"
 
 
 settings = Settings()

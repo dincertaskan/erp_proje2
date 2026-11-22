@@ -86,6 +86,8 @@ class Order(Base):
 
     id = Column(Integer, primary_key=True, index=True) # Düzeltildi
     order_code = Column(String(50), unique=True, nullable=False, index=True)
+    # Siparişi veren kayıtlı müşteri (admin panelinden girilen siparişlerde boş kalabilir)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
     customer_name = Column(String(100), nullable=False, default="Misafir Müşteri")
     total_price = Column(Numeric(10, 2), nullable=False)
     payment_method = Column(String(50), default="Kredi Kartı")
@@ -93,6 +95,7 @@ class Order(Base):
     order_status = Column(String(30), default="Onay Bekliyor")  # "Onay Bekliyor", "Hazırlanıyor", "Kargolandı", "Tamamlandı", "İptal"
     note = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
@@ -105,7 +108,17 @@ class OrderItem(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
     unit_price = Column(Numeric(10, 2), nullable=False)
+    # Sipariş anındaki birim maliyet (kâr raporu, ürün maliyeti sonradan değişse de doğru kalsın diye)
+    unit_cost = Column(Numeric(10, 2), nullable=True)
     total_price = Column(Numeric(10, 2), nullable=False)
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product")
+
+
+class AppSetting(Base):
+    """Uygulama ayarları (anahtar / JSON değer). Varsayılanlar settings_repository içinde tanımlı."""
+    __tablename__ = "app_settings"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=True)

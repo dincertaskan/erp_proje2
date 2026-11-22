@@ -1,37 +1,87 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api, { API_URL } from '../api/axios';
+import api, { getErrorMessage, getImageUrl } from '../api/axios';
 import { 
-  ShoppingCart, Trash2, Plus, Minus, ArrowRight, 
-  ShoppingBag, CheckCircle2, Loader2, ArrowLeft 
+  Trash2, Plus, Minus, ArrowRight, 
+  ShoppingBag, CheckCircle2, Loader2, AlertTriangle
 } from 'lucide-react';
 
-const getImageUrl = (url) => {
-  if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  const cleanPath = url.startsWith('/') ? url : `/${url}`;
-  return `${API_URL}${cleanPath}`;
+const readCart = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('cart_items') || '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
 };
 
 export default function Cart() {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [cartNotice, setCartNotice] = useState('');
+  const [acceptOrders, setAcceptOrders] = useState(true);
   const navigate = useNavigate();
-
-  const userName = localStorage.getItem('user_name') || 'Müşteri';
-
-  // Sepeti localStorage'dan yükle
-  useEffect(() => {
-    const savedCart = JSON.parse(localStorage.getItem('cart_items') || '[]');
-    setCartItems(savedCart);
-  }, []);
 
   // Sepeti Güncelleme Yardımcısı
   const updateCart = (newItems) => {
     setCartItems(newItems);
     localStorage.setItem('cart_items', JSON.stringify(newItems));
   };
+
+  // Mağaza geçici olarak sipariş almayı durdurmuş olabilir (Ayarlar sayfası)
+  useEffect(() => {
+    api.get('/settings/public')
+      .then((res) => setAcceptOrders(res.data.accept_orders))
+      .catch(() => {});
+  }, []);
+
+  // Sepeti localStorage'dan yükle ve güncel stok/fiyat bilgisiyle eşitle
+  useEffect(() => {
+    const savedCart = readCart();
+    setCartItems(savedCart);
+    if (savedCart.length === 0) return;
+
+    let cancelled = false;
+    api.get('/inventory/products')
+      .then((res) => {
+        if (cancelled) return;
+        const productMap = new Map((res.data || []).map((p) => [p.id, p]));
+        const changes = [];
+
+        const synced = savedCart
+          .map((item) => {
+            const product = productMap.get(item.id);
+            if (!product || product.stock <= 0) {
+              changes.push(`"${item.name}" artık satışta olmadığı veya stoğu tükendiği için sepetten çıkarıldı.`);
+              return null;
+            }
+            let quantity = item.quantity;
+            if (quantity > product.stock) {
+              quantity = product.stock;
+              changes.push(`"${product.name}" için stokta ${product.stock} adet kaldığından miktar güncellendi.`);
+            }
+            if (Number(product.unit_price) !== Number(item.unit_price)) {
+              changes.push(`"${product.name}" ürününün fiyatı güncellendi.`);
+            }
+            return {
+              ...item,
+              name: product.name,
+              unit_price: product.unit_price,
+              image_url: product.image_url,
+              stock: product.stock,
+              quantity,
+            };
+          })
+          .filter(Boolean);
+
+        updateCart(synced);
+        setCartNotice(changes.join(' '));
+      })
+      .catch((err) => console.error('Sepet ürünleri güncellenemedi:', err));
+
+    return () => { cancelled = true; };
+  }, []);
 
   // Miktar Artırma/Azaltma
   const handleQuantityChange = (id, delta) => {
@@ -73,19 +123,13 @@ export default function Cart() {
 
     setLoading(true);
     try {
-      // Backend Sipariş İsteği
+      // Backend Sipariş İsteği (müşteri adı ve fiyatlar sunucu tarafında belirlenir)
       const orderPayload = {
-        customer_name: userName,
-        total_price: subTotal,
         payment_method: "Kredi Kartı",
-        payment_status: "Ödendi",
-        order_status: "Onay Bekliyor",
         note: "Müşteri Portalı üzerinden verilen sipariş.",
         items: cartItems.map(item => ({
           product_id: item.id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total_price: item.unit_price * item.quantity
+          quantity: item.quantity
         }))
       };
 
@@ -96,7 +140,7 @@ export default function Cart() {
       setOrderSuccess(true);
     } catch (err) {
       console.error("Sipariş verilemedi:", err);
-      alert("Sipariş oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.");
+      alert(getErrorMessage(err, "Sipariş oluşturulurken bir hata oluştu. Lütfen tekrar deneyin."));
     } finally {
       setLoading(false);
     }
@@ -114,7 +158,7 @@ export default function Cart() {
         </p>
         <div className="pt-4 flex justify-center gap-3">
           <button 
-            onClick={() => navigate('/portal/orders')}
+            onClick={() => navigate('/portal/siparisler')}
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition shadow-xs cursor-pointer"
           >
             Siparişlerime Git
@@ -149,6 +193,20 @@ export default function Cart() {
           </button>
         )}
       </div>
+
+      {!acceptOrders && cartItems.length > 0 && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-medium flex items-start gap-2">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <span>Mağazamız şu anda sipariş kabul etmiyor. Sepetiniz saklanıyor; sipariş alımı açıldığında siparişinizi tamamlayabilirsiniz.</span>
+        </div>
+      )}
+
+      {cartNotice && (
+        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-medium flex items-start gap-2">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <span>{cartNotice}</span>
+        </div>
+      )}
 
       {/* BOŞ SEPET GÖRÜNÜMÜ */}
       {cartItems.length === 0 ? (
@@ -193,7 +251,7 @@ export default function Cart() {
                   <div>
                     <h3 className="font-bold text-gray-800 text-sm">{item.name}</h3>
                     <span className="text-xs font-semibold text-indigo-600 block mt-0.5">
-                      ₺{Number(item.unit_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} / Adet
+                      ${Number(item.unit_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} / Adet
                     </span>
                   </div>
                 </div>
@@ -218,7 +276,7 @@ export default function Cart() {
 
                   <div className="text-right shrink-0">
                     <span className="text-xs font-extrabold text-gray-900 block">
-                      ₺{(Number(item.unit_price) * item.quantity).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                      ${(Number(item.unit_price) * item.quantity).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
 
@@ -242,7 +300,7 @@ export default function Cart() {
               <div className="flex justify-between">
                 <span>Ara Toplam:</span>
                 <span className="font-semibold text-gray-800">
-                  ₺{subTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                  ${subTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -253,15 +311,15 @@ export default function Cart() {
               <div className="border-t border-gray-100 pt-3 flex justify-between items-center text-sm">
                 <span className="font-bold text-gray-800">Genel Toplam:</span>
                 <span className="font-extrabold text-indigo-600 text-lg">
-                  ₺{subTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                  ${subTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
 
             <button
-              disabled={loading}
+              disabled={loading || !acceptOrders}
               onClick={handleCheckout}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center justify-center gap-2 cursor-pointer mt-4"
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md flex items-center justify-center gap-2 cursor-pointer mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>

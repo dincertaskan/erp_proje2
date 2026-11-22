@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import api from '../api/axios';
+import api, { getErrorMessage, getImageUrl } from '../api/axios';
 import { 
   ArrowLeft, Package, Tag, AlertTriangle, 
   CheckCircle2, Loader2, Trash2 
@@ -38,6 +38,7 @@ export default function ProductDetail() {
       navigate('/products');
     } catch (err) {
       console.error("Silme hatası:", err);
+      alert(getErrorMessage(err, "Ürün silinirken bir hata oluştu."));
     }
   };
 
@@ -94,10 +95,10 @@ export default function ProductDetail() {
           <div className="w-52 h-52 shrink-0 bg-white rounded-xl border border-gray-200 p-2 flex items-center justify-center overflow-hidden shadow-xs">
             {product.image_url ? (
               <img 
-                src={product.image_url} 
+                src={getImageUrl(product.image_url)} 
                 alt={product.name} 
                 className="w-full h-full object-contain p-1"
-                onError={(e) => { e.target.onerror = null; e.target.src = 'https://via.placeholder.com/200?text=Görsel+Yok'; }}
+                onError={(e) => { e.target.onerror = null; e.target.style.visibility = 'hidden'; }}
               />
             ) : (
               <div className="text-gray-400 flex flex-col items-center gap-2">

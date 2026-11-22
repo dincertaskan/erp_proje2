@@ -8,7 +8,6 @@ import {
   Settings,
   Tag,
   Store,
-  UserCheck,
   Home
 } from 'lucide-react';
 

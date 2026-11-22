@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import api, { API_URL } from '../api/axios';
+import api, { getErrorMessage, getImageUrl } from '../api/axios';
+import { 
+  Package, Clock, CheckCircle2, XCircle, Truck, 
+  Eye, Loader2, Calendar, CreditCard, X, Search, Filter, ArrowUpDown, RotateCcw
+} from 'lucide-react';
 
 // "Devam Eden" sanal filtresi: Tamamlandı ve İptal dışındaki tüm durumlar
 const ACTIVE_STATUS_FILTER = 'Devam Eden';
@@ -10,17 +14,6 @@ const statusFromQuery = (durum) => {
   if (durum === 'devam-eden') return ACTIVE_STATUS_FILTER;
   if (durum === 'tamamlandi') return 'Tamamlandı';
   return '';
-};
-import { 
-  Package, Clock, CheckCircle2, XCircle, Truck, 
-  Eye, Loader2, RefreshCw, Calendar, CreditCard, FileText, X, Search, Filter, ArrowUpDown, RotateCcw
-} from 'lucide-react';
-
-const getImageUrl = (url) => {
-  if (!url) return null;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  const cleanPath = url.startsWith('/') ? url : `/${url}`;
-  return `${API_URL}${cleanPath}`;
 };
 
 export default function CustomerOrders() {
@@ -56,11 +49,8 @@ export default function CustomerOrders() {
     setLoading(true);
     try {
       const res = await api.get('/orders');
-      const allOrders = Array.isArray(res.data) ? res.data : [];
-      
-      // Sadece giriş yapan müşterinin kendi siparişleri süzülür
-      const myOrders = allOrders.filter(o => o.customer_name === userName);
-      setOrders(myOrders);
+      // Backend müşteriye yalnızca kendi siparişlerini döner
+      setOrders(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Siparişler çekilemedi:", err);
     } finally {
@@ -94,8 +84,7 @@ export default function CustomerOrders() {
       if (isModalOpen) setIsModalOpen(false);
     } catch (err) {
       console.error("Sipariş iptal edilemedi:", err);
-      const errorMsg = err.response?.data?.detail || "Sipariş iptal edilirken bir hata oluştu.";
-      alert(errorMsg);
+      alert(getErrorMessage(err, "Sipariş iptal edilirken bir hata oluştu."));
     } finally {
       setCancellingId(null);
     }
@@ -337,7 +326,7 @@ export default function CustomerOrders() {
 
                       {/* Toplam Tutar */}
                       <td className="py-4 px-5 text-center font-extrabold text-gray-900 whitespace-nowrap">
-                        ₺{Number(order.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                        ${Number(order.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                       </td>
 
                       {/* İşlem Butonları */}
@@ -431,12 +420,12 @@ export default function CustomerOrders() {
                                 {item.product?.name || item.product_name || `Ürün #${item.product_id}`}
                               </span>
                               <span className="text-gray-400 text-[11px]">
-                                {item.quantity} Adet x ₺{Number(item.unit_price).toLocaleString('tr-TR')}
+                                {item.quantity} Adet x ${Number(item.unit_price).toLocaleString('tr-TR')}
                               </span>
                             </div>
                           </div>
                           <span className="font-extrabold text-indigo-600">
-                            ₺{Number(item.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                            ${Number(item.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       );
@@ -450,7 +439,7 @@ export default function CustomerOrders() {
               <div className="pt-3 border-t border-gray-100 flex justify-between items-center text-xs">
                 <span className="font-bold text-gray-600">Ödenen Toplam Tutar:</span>
                 <span className="text-lg font-extrabold text-indigo-600">
-                  ₺{Number(selectedOrder.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                  ${Number(selectedOrder.total_price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
