@@ -1,16 +1,38 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.core.database import get_db
 from app.schemas.inventory_schema import (
-    StockAdjustmentCreate, 
-    ProductCreate, 
-    ProductUpdate, 
+    CategoryCreate,
+    CategoryResponse,
+    StockAdjustmentCreate,
+    ProductCreate,
+    ProductUpdate,
     ProductDetailResponse
 )
 from app.repositories.inventory_repository import InventoryRepository
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
+
+CATEGORY_NOT_FOUND = "Seçilen kategori bulunamadı. Lütfen geçerli bir kategori seçin."
+
+# 0a. Kategori Listesi
+@router.get("/categories", response_model=List[CategoryResponse])
+def get_categories(db: Session = Depends(get_db)):
+    return InventoryRepository(db).get_all_categories()
+
+# 0b. Yeni Kategori Ekle
+@router.post("/categories", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+def create_category(category_data: CategoryCreate, db: Session = Depends(get_db)):
+    repo = InventoryRepository(db)
+    if repo.get_category_by_name(category_data.name):
+        raise HTTPException(status_code=409, detail=f"'{category_data.name}' adında bir kategori zaten var.")
+    try:
+        return repo.create_category(category_data.name, category_data.color or "#6366f1")
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"'{category_data.name}' adında bir kategori zaten var.")
 
 # 1. Ürün Listesi (Filtrelemeli)
 @router.get("/products", response_model=List[ProductDetailResponse])
@@ -36,13 +58,25 @@ def get_product_detail(product_id: int, db: Session = Depends(get_db)):
 @router.post("/products", response_model=ProductDetailResponse, status_code=status.HTTP_201_CREATED)
 def create_product(product_data: ProductCreate, db: Session = Depends(get_db)):
     repo = InventoryRepository(db)
-    return repo.create_product(product_data)
+    if not repo.category_exists(product_data.category_id):
+        raise HTTPException(status_code=400, detail=CATEGORY_NOT_FOUND)
+    try:
+        return repo.create_product(product_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ürün kaydedilemedi. Girdiğiniz bilgileri kontrol edin.")
 
 # 4. Ürün Güncelle
 @router.put("/products/{product_id}", response_model=ProductDetailResponse)
 def update_product(product_id: int, product_data: ProductUpdate, db: Session = Depends(get_db)):
     repo = InventoryRepository(db)
-    product = repo.update_product(product_id, product_data)
+    if product_data.category_id is not None and not repo.category_exists(product_data.category_id):
+        raise HTTPException(status_code=400, detail=CATEGORY_NOT_FOUND)
+    try:
+        product = repo.update_product(product_id, product_data)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Ürün güncellenemedi. Girdiğiniz bilgileri kontrol edin.")
     if not product:
         raise HTTPException(status_code=404, detail="Ürün bulunamadı.")
     return product
@@ -51,7 +85,16 @@ def update_product(product_id: int, product_data: ProductUpdate, db: Session = D
 @router.delete("/products/{product_id}")
 def delete_product(product_id: int, db: Session = Depends(get_db)):
     repo = InventoryRepository(db)
-    success = repo.delete_product(product_id)
+    if repo.is_product_used_in_sales(product_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Bu ürün geçmiş siparişlerde kullanıldığı için silinemez.",
+        )
+    try:
+        success = repo.delete_product(product_id)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Bu ürün başka kayıtlarda kullanıldığı için silinemez.")
     if not success:
         raise HTTPException(status_code=404, detail="Silinecek ürün bulunamadı.")
     return {"message": "Ürün başarıyla silindi."}

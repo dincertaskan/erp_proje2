@@ -30,6 +30,11 @@ export default function Products() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Ürün formundan yeni kategori ekleme
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [savingCategory, setSavingCategory] = useState(false);
+
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -60,9 +65,43 @@ export default function Products() {
     fetchProducts();
   };
 
+  const getErrorDetail = (err, fallback) => {
+    const detail = err.response?.data?.detail;
+    if (Array.isArray(detail)) return detail[0]?.msg || fallback;
+    return detail || fallback;
+  };
+
+  const resetNewCategory = (open = false) => {
+    setShowNewCategory(open);
+    setNewCategoryName('');
+  };
+
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      setErrorMsg('Kategori adı boş olamaz.');
+      return;
+    }
+    setErrorMsg('');
+    setSavingCategory(true);
+    try {
+      const res = await api.post('/inventory/categories', { name });
+      setCategories(prev => [...prev, res.data]);
+      setProductForm(prev => ({ ...prev, category_id: res.data.id }));
+      resetNewCategory(false);
+    } catch (err) {
+      console.error("Kategori ekleme hatası:", err);
+      setErrorMsg(getErrorDetail(err, "Kategori eklenemedi."));
+    } finally {
+      setSavingCategory(false);
+    }
+  };
+
   const handleOpenAddModal = () => {
     setErrorMsg('');
     setEditingProduct(null);
+    // Hiç kategori yoksa yeni kategori alanını doğrudan açık getir
+    resetNewCategory(categories.length === 0);
     setProductForm({
       name: '',
       category_id: categories.length > 0 ? categories[0].id : '',
@@ -78,6 +117,7 @@ export default function Products() {
 
   const handleOpenEditModal = (product) => {
     setErrorMsg('');
+    resetNewCategory(false);
     setEditingProduct(product);
     setProductForm({
       name: product.name || '',
@@ -136,12 +176,7 @@ export default function Products() {
       fetchProducts();
     } catch (err) {
       console.error("Kaydetme hatası:", err);
-      const detail = err.response?.data?.detail;
-      if (Array.isArray(detail)) {
-        setErrorMsg(detail[0]?.msg || "Girdiğiniz verileri kontrol edin.");
-      } else {
-        setErrorMsg(detail || "İşlem gerçekleştirilirken bir hata oluştu.");
-      }
+      setErrorMsg(getErrorDetail(err, "İşlem gerçekleştirilirken bir hata oluştu."));
     } finally {
       setSubmitting(false);
     }
@@ -154,6 +189,7 @@ export default function Products() {
       fetchProducts();
     } catch (err) {
       console.error("Silme hatası:", err);
+      window.alert(getErrorDetail(err, "Ürün silinirken bir hata oluştu."));
     }
   };
 
@@ -337,18 +373,67 @@ export default function Products() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Kategori</label>
-                  <select 
-                    required
-                    value={productForm.category_id}
-                    onChange={e => setProductForm({...productForm, category_id: e.target.value})}
-                    className="w-full border border-gray-300 p-2.5 rounded-lg text-xs focus:outline-indigo-500 bg-white"
-                  >
-                    <option value="">Kategori Seçin</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-gray-600">Kategori</label>
+                    {!showNewCategory && (
+                      <button
+                        type="button"
+                        onClick={() => resetNewCategory(true)}
+                        className="flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      >
+                        <Plus size={12} /> Yeni
+                      </button>
+                    )}
+                  </div>
+                  {showNewCategory ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={newCategoryName}
+                        onChange={e => setNewCategoryName(e.target.value)}
+                        onKeyDown={e => {
+                          // Enter ürün formunu göndermesin, kategoriyi eklesin
+                          if (e.key === 'Enter') { e.preventDefault(); handleCreateCategory(); }
+                          if (e.key === 'Escape') { e.preventDefault(); resetNewCategory(false); }
+                        }}
+                        placeholder="Yeni kategori adı"
+                        maxLength={100}
+                        className="min-w-0 flex-1 border border-gray-300 p-2.5 rounded-lg text-xs focus:outline-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCreateCategory}
+                        disabled={savingCategory}
+                        className="px-2.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-60"
+                        title="Kategoriyi ekle"
+                      >
+                        {savingCategory ? <Loader2 size={14} className="animate-spin" /> : 'Ekle'}
+                      </button>
+                      {categories.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => resetNewCategory(false)}
+                          className="p-2.5 border border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50 cursor-pointer"
+                          title="Vazgeç"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      value={productForm.category_id}
+                      onChange={e => setProductForm({...productForm, category_id: e.target.value})}
+                      className="w-full border border-gray-300 p-2.5 rounded-lg text-xs focus:outline-indigo-500 bg-white"
+                    >
+                      <option value="">Kategori Seçin</option>
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>

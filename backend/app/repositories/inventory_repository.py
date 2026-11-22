@@ -1,6 +1,7 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
-from app.models.erp import Product, Category, StockMovement
+from app.models.erp import Product, Category, StockMovement, OrderItem, Sale
 
 class InventoryRepository:
     def __init__(self, db: Session):
@@ -9,6 +10,13 @@ class InventoryRepository:
     # YENİ EKLENDİ: Tüm kategorileri getiren metod (Müşteri Portalının filtreleme yapabilmesi için)
     def get_all_categories(self) -> List[Category]:
         return self.db.query(Category).order_by(Category.id.asc()).all()
+
+    def category_exists(self, category_id: int) -> bool:
+        return self.db.query(Category.id).filter(Category.id == category_id).first() is not None
+
+    def get_category_by_name(self, name: str) -> Optional[Category]:
+        # Büyük/küçük harf farkı gözetmeden aynı isimli kategoriyi bulur
+        return self.db.query(Category).filter(func.lower(Category.name) == name.lower()).first()
 
     # YENİ EKLENDİ: Yeni kategori oluşturma metodu
     def create_category(self, name: str, color: str = "#6366f1") -> Category:
@@ -87,6 +95,12 @@ class InventoryRepository:
         product.category_name = category.name if category else "Genel"
         product.is_critical = product.stock <= product.min_stock
         return product
+
+    def is_product_used_in_sales(self, product_id: int) -> bool:
+        # Siparişlerde veya eski satış kayıtlarında geçen ürün silinemez (geçmiş kayıtlar bozulmasın diye)
+        in_orders = self.db.query(OrderItem.id).filter(OrderItem.product_id == product_id).first() is not None
+        in_sales = self.db.query(Sale.id).filter(Sale.product_id == product_id).first() is not None
+        return in_orders or in_sales
 
     def delete_product(self, product_id: int) -> bool:
         product = self.db.query(Product).filter(Product.id == product_id).first()

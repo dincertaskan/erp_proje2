@@ -1,6 +1,27 @@
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional
 from datetime import datetime
+
+# KATEGORİ ŞEMALARI
+class CategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    color: Optional[str] = Field(default="#6366f1", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Kategori adı boş olamaz.")
+        return value
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    color: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 # STOK HAREKET VE DÜZENLEME ŞEMALARI
 class StockAdjustmentCreate(BaseModel):
