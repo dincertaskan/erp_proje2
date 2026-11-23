@@ -1,16 +1,31 @@
-# React + Vite
+# ERP Yönetim Sistemi – Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+ERP uygulamasının React arayüzü: yönetici paneli ve müşteri portalı.
 
-Currently, two official plugins are available:
+**Teknolojiler:** React 19, Vite, Tailwind CSS, React Router, Axios, Recharts
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Çalıştırma
 
-## React Compiler
+```bash
+npm install
+npm run dev
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Uygulama `http://localhost:5173` adresinde açılır. Backend'in çalışıyor olması gerekir.
 
-## Expanding the Oxlint configuration
+Backend varsayılan olarak `http://127.0.0.1:8000` adresinde aranır. Farklı bir adres kullanılıyorsa bu klasörde bir `.env` dosyası oluşturun:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+```env
+VITE_API_URL=http://127.0.0.1:8000
+```
+
+## Komutlar
+
+| Komut | Açıklama |
+| --- | --- |
+| `npm run dev` | Geliştirme sunucusunu başlatır |
+| `npm run build` | Üretim derlemesi alır (`dist/`) |
+| `npm run preview` | Derlemeyi yerelde önizler |
+| `npm run lint` | Oxlint ile kod denetimi yapar |
+
+Kurulumun tamamı, backend ayarları ve proje hakkında ayrıntılı bilgi için [ana README](../README.md) dosyasına bakın.
